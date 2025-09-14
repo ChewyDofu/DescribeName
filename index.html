@@ -1,0 +1,179 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Please describe the person in 50 words or less</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<style>
+  :root { font-family: system-ui, Arial, sans-serif; color-scheme: light; }
+  body { margin: 0; background: #f6f7fb; color: #222; }
+  .wrap { max-width: 780px; margin: 0 auto; padding: 24px; }
+  .card { background: #fff; border-radius: 14px; box-shadow: 0 8px 28px rgba(0,0,0,.08); padding: 20px; }
+  h1 { margin: 0 0 10px 0; font-size: 22px; }
+  p { margin: 8px 0; color: #444; }
+  .row { display: flex; gap: 8px; margin: 12px 0; flex-wrap: wrap; }
+  input[type="text"], input[type="password"], textarea {
+    width: 100%; padding: 12px; border: 1px solid #dde1ea; border-radius: 10px; font-size: 16px; box-sizing: border-box;
+  }
+  textarea { min-height: 140px; }
+  button { border: 0; padding: 12px 16px; border-radius: 10px; cursor: pointer; font-size: 15px; }
+  .primary { background: #2d6cdf; color: #fff; }
+  .ghost { background: #eef2ff; color: #2d3a55; }
+  .ok { background: #17a34a; color: #fff; }
+  .warn { background: #ffe8c6; color: #8a4b00; }
+  .error { color: #b00020; margin-top: 6px; }
+  .result { margin-top: 14px; padding: 16px; border: 1px solid #e8eaf2; border-radius: 10px; background: #fafbff; }
+  .name { font-weight: 700; font-size: 18px; }
+  .hide { display: none; }
+  .muted { color: #6a7280; font-size: 14px; }
+  label.small { font-size: 13px; color: #555; display: block; margin-top: 6px; }
+  .counter { font-size: 12px; color: #666; text-align: right; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="card">
+    <h1>Please describe the person in 50 words or less</h1>
+    <p class="muted">Enter your name, the page will ask the secure service who you got, then you can submit your 50 word note. Your organiser will see the responses.</p>
+
+    <!-- Step 1, identify -->
+    <div id="stepIdentify">
+      <div class="row">
+        <input id="yourName" type="text" placeholder="Your full name">
+        <button id="btnReveal" class="primary">Reveal who I got</button>
+      </div>
+      <div id="errIdentify" class="error"></div>
+    </div>
+
+    <!-- Step 2, show assignment -->
+    <div id="stepAssigned" class="hide">
+      <div class="result">
+        <div>You will write about</div>
+        <div class="name" id="assignee">...</div>
+      </div>
+      <label class="small">Your 50 word description</label>
+      <textarea id="message" placeholder="Write up to 50 words"></textarea>
+      <div class="counter"><span id="wordCount">0</span> of 50 words</div>
+      <div class="row">
+        <button id="btnSubmit" class="ok">Submit</button>
+        <button id="btnEditName" class="ghost">Change my name</button>
+      </div>
+      <div id="errSubmit" class="error"></div>
+      <p class="muted">After you submit, you can still resubmit, the organiser will see the latest one.</p>
+    </div>
+
+    <!-- Step 3, thank you -->
+    <div id="stepDone" class="hide">
+      <p class="result">Thanks, your response was recorded.</p>
+      <button id="btnAnother" class="ghost">Submit again</button>
+    </div>
+  </div>
+</div>
+
+<script>
+(function(){
+  // 1) Paste your deployed Apps Script Web App URL here
+  // Example: "https://script.google.com/macros/s/AKfycbx.../exec"
+  const API_BASE = "https://script.google.com/macros/s/AKfycbxeP-Of3CqKrvYYXtdVf5o_OriT9JmH_WbLnjPJJLwiLPbLFm2cy1c_1QoUZK11on9z/exec";
+
+  const $ = sel => document.querySelector(sel);
+
+  const errIdentify = $("#errIdentify");
+  const errSubmit = $("#errSubmit");
+  const stepIdentify = $("#stepIdentify");
+  const stepAssigned = $("#stepAssigned");
+  const stepDone = $("#stepDone");
+  const assigneeEl = $("#assignee");
+  const btnReveal = $("#btnReveal");
+  const btnSubmit = $("#btnSubmit");
+  const btnEditName = $("#btnEditName");
+  const btnAnother = $("#btnAnother");
+  const inputName = $("#yourName");
+  const inputCode = $("#groupCode");
+  const txt = $("#message");
+  const wordCount = $("#wordCount");
+
+  function normalize(s){ return s ? s.normalize("NFKC").trim() : ""; }
+
+  function countWords(s){
+    return normalize(s).split(/\s+/).filter(Boolean).length;
+  }
+
+  txt.addEventListener("input", () => {
+    const n = countWords(txt.value);
+    wordCount.textContent = n;
+    if (n > 50) {
+      txt.value = txt.value.split(/\s+/).slice(0, 50).join(" ");
+      wordCount.textContent = "50";
+    }
+  });
+
+  btnReveal.addEventListener("click", async () => {
+    errIdentify.textContent = "";
+    const name = normalize(inputName.value);
+    if (!name) { errIdentify.textContent = "Enter your name."; return; }
+    try{
+      const url = new URL(API_BASE);
+      url.searchParams.set("action", "assign");
+      url.searchParams.set("name", name);
+      const res = await fetch(url.toString(), { method: "GET" });
+      if (!res.ok) {
+        const txt = await res.text();
+        throw new Error(txt || "Could not fetch assignment.");
+      }
+      const data = await res.json();
+      assigneeEl.textContent = data.recipient;
+      stepIdentify.classList.add("hide");
+      stepAssigned.classList.remove("hide");
+      txt.focus();
+      // Store who in case of submit
+      sessionStorage.setItem("who_name", name);
+      sessionStorage.setItem("who_recipient", data.recipient);
+      sessionStorage.setItem("who_code", code);
+    }catch(e){
+      errIdentify.textContent = e.message.includes("not found")
+        ? "Name not found, check spelling, or contact the organiser."
+        : "Could not reveal, try again, or contact the organiser.";
+    }
+  });
+
+  btnEditName.addEventListener("click", () => {
+    stepAssigned.classList.add("hide");
+    stepIdentify.classList.remove("hide");
+  });
+
+  btnSubmit.addEventListener("click", async () => {
+    errSubmit.textContent = "";
+    const msg = normalize(txt.value);
+    const name = sessionStorage.getItem("who_name") || normalize(inputName.value);
+    const recipient = sessionStorage.getItem("who_recipient") || assigneeEl.textContent.trim();
+
+    if (!msg) { errSubmit.textContent = "Write your message first."; return; }
+    if (countWords(msg) > 50) { errSubmit.textContent = "Please keep it to 50 words."; return; }
+    try{
+      const res = await fetch(API_BASE + "?action=submit", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name, recipient, message: msg })
+      });
+      if (!res.ok) {
+        const t = await res.text();
+        throw new Error(t || "Submit failed.");
+      }
+      stepAssigned.classList.add("hide");
+      stepDone.classList.remove("hide");
+    }catch(e){
+      errSubmit.textContent = "Could not submit, try again.";
+    }
+  });
+
+  btnAnother.addEventListener("click", () => {
+    txt.value = "";
+    wordCount.textContent = "0";
+    stepDone.classList.add("hide");
+    stepAssigned.classList.remove("hide");
+  });
+})();
+</script>
+</body>
+</html>
