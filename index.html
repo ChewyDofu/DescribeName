@@ -18,8 +18,8 @@
   textarea { min-height: 140px; }
   button { border: 0; padding: 12px 16px; border-radius: 10px; cursor: pointer; font-size: 15px; }
   .primary { background: #2d6cdf; color: #fff; }
-  .ghost { background: #eef2ff; color: #2d3a55; }
   .ok { background: #17a34a; color: #fff; }
+  .ghost { background: #eef2ff; color: #2d3a55; }
   .error { color: #b00020; margin-top: 6px; }
   .result { margin-top: 14px; padding: 16px; border: 1px solid #e8eaf2; border-radius: 10px; background: #fafbff; }
   .name { font-weight: 700; font-size: 18px; }
@@ -33,7 +33,7 @@
 <div class="wrap">
   <div class="card">
     <h1>Please describe the person in 50 words or less</h1>
-    <p class="muted">Enter your name, the page will reveal who you got, then submit your 50 word note. The organiser can read the responses in a Google Sheet.</p>
+    <p class="muted">Enter your own name, the page will reveal who you got, then submit your 50 word note. The organiser can read the responses in a Google Sheet.</p>
 
     <!-- Step 1, identify -->
     <div id="stepIdentify">
@@ -55,7 +55,6 @@
       <div class="counter"><span id="wordCount">0</span> of 50 words</div>
       <div class="row">
         <button id="btnSubmit" class="ok">Submit</button>
-        <button id="btnEditName" class="ghost">Change my name</button>
       </div>
       <div id="errSubmit" class="error"></div>
       <p class="muted">You can resubmit, the organiser will see the latest one.</p>
@@ -71,10 +70,10 @@
 
 <script>
 (function(){
-  // Paste your Apps Script Web App URL, it must end with /exec
-const API_BASE = "https://script.google.com/macros/s/AKfycbz-MNGcTWJ42e1Z5pPrBoxvivU79j2apRzPl-8FCLT6CqpQLBZBgDf26Z_YsX6Zfh4-/exec";
+  // Paste your Apps Script Web App URL here, it must end with /exec
+  const API_BASE = "YOUR_APPS_SCRIPT_WEB_APP_URL";
 
-
+  // Elements
   const $ = s => document.querySelector(s);
   const errIdentify = $("#errIdentify");
   const errSubmit = $("#errSubmit");
@@ -84,15 +83,18 @@ const API_BASE = "https://script.google.com/macros/s/AKfycbz-MNGcTWJ42e1Z5pPrBox
   const assigneeEl = $("#assignee");
   const btnReveal = $("#btnReveal");
   const btnSubmit = $("#btnSubmit");
-  const btnEditName = $("#btnEditName");
   const btnAnother = $("#btnAnother");
   const inputName = $("#yourName");
   const txt = $("#message");
   const wordCount = $("#wordCount");
 
+  // Helpers
   function normalize(s){ return s ? s.normalize("NFKC").trim() : ""; }
   function countWords(s){ return normalize(s).split(/\s+/).filter(Boolean).length; }
+  function lockName(name){ localStorage.setItem("lockedName", name); }
+  function getLockedName(){ return localStorage.getItem("lockedName") || ""; }
 
+  // Word counter, hard cap at 50
   txt.addEventListener("input", () => {
     const n = countWords(txt.value);
     if (n > 50) {
@@ -103,64 +105,105 @@ const API_BASE = "https://script.google.com/macros/s/AKfycbz-MNGcTWJ42e1Z5pPrBox
     }
   });
 
+  // Auto lock check on load, also try auto reveal if we have a locked name
+  window.addEventListener("DOMContentLoaded", async () => {
+    const locked = getLockedName();
+    if (locked) {
+      inputName.value = locked;
+      inputName.disabled = true;
+      btnReveal.disabled = true;
+      // Try to auto fetch the assignment
+      try {
+        await revealForName(locked, { auto: true });
+      } catch {
+        // Ignore, user can still submit if the page already has sessionStorage values from earlier
+      }
+    }
+  });
+
+  // Reveal handler with timeout, better errors, and name lock
   btnReveal.addEventListener("click", async () => {
     errIdentify.textContent = "";
     const name = normalize(inputName.value);
     if (!name) { errIdentify.textContent = "Enter your name."; return; }
+
+    btnReveal.disabled = true;
+    const originalLabel = btnReveal.textContent;
+    btnReveal.textContent = "Revealing...";
+
+    try {
+      await revealForName(name, { auto: false });
+      // Lock on this device
+      lockName(name);
+      inputName.disabled = true;
+      btnReveal.disabled = true;
+    } catch(e) {
+      errIdentify.textContent = e.message || "Could not reveal, try again.";
+      btnReveal.disabled = false;
+    } finally {
+      btnReveal.textContent = originalLabel;
+    }
+  });
+
+  async function revealForName(name, opts) {
+    const controller = new AbortController();
+    const t = setTimeout(() => controller.abort(), 15000);
+
     try{
       const url = new URL(API_BASE);
       url.searchParams.set("action", "assign");
       url.searchParams.set("name", name);
-      const res = await fetch(url.toString(), { method: "GET" });
+      url.searchParams.set("t", Date.now()); // avoid caches
+      const res = await fetch(url.toString(), {
+        method: "GET",
+        cache: "no-store",
+        signal: controller.signal
+      });
       const text = await res.text();
       let data;
       try { data = JSON.parse(text); } catch { throw new Error("Bad response from server"); }
       if (data.error) throw new Error(data.error);
+
       assigneeEl.textContent = data.recipient;
       sessionStorage.setItem("who_name", name);
       sessionStorage.setItem("who_recipient", data.recipient);
+
       stepIdentify.classList.add("hide");
       stepAssigned.classList.remove("hide");
       txt.focus();
+    } finally {
+      clearTimeout(t);
+    }
+  }
+
+  // Submit handler, text/plain to avoid CORS preflight
+  btnSubmit.addEventListener("click", async () => {
+    errSubmit.textContent = "";
+    const msg = normalize(txt.value);
+    const name = sessionStorage.getItem("who_name") || normalize(inputName.value);
+    const recipient = sessionStorage.getItem("who_recipient") || assigneeEl.textContent.trim();
+
+    if (!msg) { errSubmit.textContent = "Write your message first."; return; }
+    if (countWords(msg) > 50) { errSubmit.textContent = "Please keep it to 50 words."; return; }
+
+    try{
+      const res = await fetch(API_BASE + "?action=submit", {
+        method: "POST",
+        headers: { "Content-Type": "text/plain;charset=utf-8" },
+        body: JSON.stringify({ name, recipient, message: msg })
+      });
+      const text = await res.text();
+      let data; try { data = JSON.parse(text); } catch { data = {}; }
+      if (data.error) throw new Error(data.error);
+
+      stepAssigned.classList.add("hide");
+      stepDone.classList.remove("hide");
     }catch(e){
-      errIdentify.textContent = /not found/i.test(e.message)
-        ? "Name not found, check spelling, or contact the organiser."
-        : e.message || "Could not reveal, try again.";
+      errSubmit.textContent = e.message || "Could not submit, try again.";
     }
   });
 
-  btnEditName.addEventListener("click", () => {
-    stepAssigned.classList.add("hide");
-    stepIdentify.classList.remove("hide");
-  });
-
-  btnSubmit.addEventListener("click", async () => {
-  errSubmit.textContent = "";
-  const msg = (txt.value || "").trim();
-  const name = sessionStorage.getItem("who_name") || (inputName.value || "").trim();
-  const recipient = sessionStorage.getItem("who_recipient") || assigneeEl.textContent.trim();
-
-  if (!msg) { errSubmit.textContent = "Write your message first."; return; }
-
-  try {
-    const res = await fetch(API_BASE + "?action=submit", {
-      method: "POST",
-      headers: { "Content-Type": "text/plain;charset=utf-8" }, // avoids CORS preflight
-      body: JSON.stringify({ name, recipient, message: msg })
-    });
-
-    const text = await res.text();
-    let data; try { data = JSON.parse(text); } catch { data = {}; }
-    if (data.error) throw new Error(data.error);
-
-    stepAssigned.classList.add("hide");
-    stepDone.classList.remove("hide");
-  } catch (e) {
-    errSubmit.textContent = e.message || "Could not submit, try again.";
-  }
-});
-
-
+  // Allow another submission for the same person
   btnAnother.addEventListener("click", () => {
     txt.value = "";
     wordCount.textContent = "0";
