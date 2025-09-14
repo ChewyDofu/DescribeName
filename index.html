@@ -35,7 +35,7 @@
     <h1>Please describe the person in 50 words or less</h1>
     <p class="muted">Enter your own name, the page will reveal who you got, then submit your 50 word note. The organiser can read the responses in a Google Sheet.</p>
 
-    <!-- Step 1, identify -->
+    <!-- Step 1 -->
     <div id="stepIdentify">
       <div class="row">
         <input id="yourName" type="text" placeholder="Your full name">
@@ -44,7 +44,7 @@
       <div id="errIdentify" class="error"></div>
     </div>
 
-    <!-- Step 2, show assignment and form -->
+    <!-- Step 2 -->
     <div id="stepAssigned" class="hide">
       <div class="result">
         <div>You will write about</div>
@@ -60,7 +60,7 @@
       <p class="muted">You can resubmit, the organiser will see the latest one.</p>
     </div>
 
-    <!-- Step 3, done -->
+    <!-- Step 3 -->
     <div id="stepDone" class="hide">
       <p class="result">Thanks, your response was recorded.</p>
       <button id="btnAnother" class="ghost">Submit again</button>
@@ -70,10 +70,9 @@
 
 <script>
 (function(){
-  // Paste your Apps Script Web App URL here, it must end with /exec
-  const API_BASE = "YOUR_APPS_SCRIPT_WEB_APP_URL";
+  // ✅ Your actual Google Apps Script URL:
+  const API_BASE = "https://script.google.com/macros/s/AKfycbz-MNGcTWJ42e1Z5pPrBoxvivU79j2apRzPl-8FCLT6CqpQLBZBgDf26Z_YsX6Zfh4-/exec";
 
-  // Elements
   const $ = s => document.querySelector(s);
   const errIdentify = $("#errIdentify");
   const errSubmit = $("#errSubmit");
@@ -88,13 +87,11 @@
   const txt = $("#message");
   const wordCount = $("#wordCount");
 
-  // Helpers
   function normalize(s){ return s ? s.normalize("NFKC").trim() : ""; }
   function countWords(s){ return normalize(s).split(/\s+/).filter(Boolean).length; }
   function lockName(name){ localStorage.setItem("lockedName", name); }
   function getLockedName(){ return localStorage.getItem("lockedName") || ""; }
 
-  // Word counter, hard cap at 50
   txt.addEventListener("input", () => {
     const n = countWords(txt.value);
     if (n > 50) {
@@ -105,23 +102,17 @@
     }
   });
 
-  // Auto lock check on load, also try auto reveal if we have a locked name
+  // Auto load if name is already locked
   window.addEventListener("DOMContentLoaded", async () => {
     const locked = getLockedName();
     if (locked) {
       inputName.value = locked;
       inputName.disabled = true;
       btnReveal.disabled = true;
-      // Try to auto fetch the assignment
-      try {
-        await revealForName(locked, { auto: true });
-      } catch {
-        // Ignore, user can still submit if the page already has sessionStorage values from earlier
-      }
+      try { await revealForName(locked, { auto: true }); } catch {}
     }
   });
 
-  // Reveal handler with timeout, better errors, and name lock
   btnReveal.addEventListener("click", async () => {
     errIdentify.textContent = "";
     const name = normalize(inputName.value);
@@ -132,8 +123,7 @@
     btnReveal.textContent = "Revealing...";
 
     try {
-      await revealForName(name, { auto: false });
-      // Lock on this device
+      await revealForName(name);
       lockName(name);
       inputName.disabled = true;
       btnReveal.disabled = true;
@@ -145,20 +135,15 @@
     }
   });
 
-  async function revealForName(name, opts) {
+  async function revealForName(name) {
     const controller = new AbortController();
     const t = setTimeout(() => controller.abort(), 15000);
-
     try{
       const url = new URL(API_BASE);
       url.searchParams.set("action", "assign");
       url.searchParams.set("name", name);
-      url.searchParams.set("t", Date.now()); // avoid caches
-      const res = await fetch(url.toString(), {
-        method: "GET",
-        cache: "no-store",
-        signal: controller.signal
-      });
+      url.searchParams.set("t", Date.now());
+      const res = await fetch(url.toString(), { method: "GET", cache: "no-store", signal: controller.signal });
       const text = await res.text();
       let data;
       try { data = JSON.parse(text); } catch { throw new Error("Bad response from server"); }
@@ -176,7 +161,6 @@
     }
   }
 
-  // Submit handler, text/plain to avoid CORS preflight
   btnSubmit.addEventListener("click", async () => {
     errSubmit.textContent = "";
     const msg = normalize(txt.value);
@@ -203,7 +187,6 @@
     }
   });
 
-  // Allow another submission for the same person
   btnAnother.addEventListener("click", () => {
     txt.value = "";
     wordCount.textContent = "0";
