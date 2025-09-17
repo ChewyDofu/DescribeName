@@ -33,7 +33,7 @@
 <div class="wrap">
   <div class="card">
     <h1>Please describe the person in 50 words or less</h1>
-    <p class="muted">Enter your own name, the page will reveal who you got, then submit your 50 word note. The organiser can read the responses in a Google Sheet.</p>
+    <p class="muted">Enter your own name, the page will reveal who you got, then submit your 50 word note. I can read the responses in a Google Sheet.</p>
 
     <!-- Step 1 -->
     <div id="stepIdentify">
@@ -44,21 +44,31 @@
       <div id="errIdentify" class="error"></div>
     </div>
 
-    <!-- Step 2 -->
-    <div id="stepAssigned" class="hide">
-      <div class="result">
-        <div>You will write about</div>
-        <div class="name" id="assignee">...</div>
-      </div>
-      <label class="small">Your 50 word description</label>
-      <textarea id="message" placeholder="Write up to 50 words"></textarea>
-      <div class="counter"><span id="wordCount">0</span> of 50 words</div>
-      <div class="row">
-        <button id="btnSubmit" class="ok">Submit</button>
-      </div>
-      <div id="errSubmit" class="error"></div>
-      <p class="muted">You can resubmit, the organiser will see the latest one.</p>
-    </div>
+   <!-- Step 2 -->
+<div id="stepAssigned" class="hide">
+  <div class="result">
+    <div>You will write about</div>
+    <div class="name" id="assignee">...</div>
+  </div>
+
+  <!-- Example section -->
+  <div style="background:#f1f4ff; border:1px solid #ccd3f6; border-radius:10px; padding:10px; margin:10px 0; font-size:14px; color:#333;">
+    <strong>Example:</strong><br>
+    Jesse’s the guy who’s always smiling, and you can hear his laugh from miles away. 
+    He’s full of good vibes and makes every room lighter. Usually playful and joking, 
+    but when he gets serious, you know it matters. The friend who makes life brighter just by showing up.
+  </div>
+
+  <label class="small">Your 50 word description</label>
+  <textarea id="message" placeholder="Write up to 50 words"></textarea>
+  <div class="counter"><span id="wordCount">0</span> of 50 words</div>
+  <div class="row">
+    <button id="btnSubmit" class="ok">Submit</button>
+  </div>
+  <div id="errSubmit" class="error"></div>
+  <p class="muted">You can resubmit, I will see the latest one.</p>
+</div>
+
 
     <!-- Step 3 -->
     <div id="stepDone" class="hide">
